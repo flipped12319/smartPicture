@@ -46,3 +46,13 @@ class Config:
 
     # 工具超时
     ANALYZE_IMAGE_TIMEOUT = int(os.getenv("ANALYZE_IMAGE_TIMEOUT", "120"))
+
+    # ── 长期记忆（Chroma）──
+    CHROMA_MEMORY_DIR = os.getenv("CHROMA_MEMORY_DIR", "./chroma_memory_db")
+    MEMORY_COLLECTION_NAME = os.getenv("MEMORY_COLLECTION_NAME", "long_term_memory")
+    MEMORY_RETRIEVAL_K = int(os.getenv("MEMORY_RETRIEVAL_K", "3"))
+    MEMORY_SIMILARITY_THRESHOLD = float(os.getenv("MEMORY_SIMILARITY_THRESHOLD", "0.6"))
+    MEMORY_AUTO_EXTRACT = os.getenv("MEMORY_AUTO_EXTRACT", "true").lower() == "true"
+
+    # ── 短期记忆（SQLite checkpoint）──
+    SQLITE_DB_PATH = os.getenv("SQLITE_DB_PATH", "./checkpoints.db")
