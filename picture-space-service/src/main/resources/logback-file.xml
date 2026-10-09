@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  把空间服务的日志同时写一份到工作目录的 app.log。
+
+  为什么需要：`mvnw spring-boot:run` 会 fork 一个新 JVM 跑应用，那个子进程的 stdout
+  不会进到父进程被重定向的文件里 —— 表现是「日志文件里只有 Maven 的输出，应用日志
+  一条都没有」。排查跨服务问题时（尤其是「空间不存在」这类 404）这一条很致命。
+
+  只有在显式加上 -Dlogging.config=classpath:logback-file.xml 时才生效，日常启动不受影响。
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>app.log</file>
+        <append>false</append>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>

@@ -1,0 +1,12 @@
+HELP.md
+target/
+.idea
+*.iml
+*.iws
+*.ipr
+
+### Custom ###
+# 含 JWT 密钥与数据库密码，属于环境私有配置，不入库；
+# clone 下来的人照 application.yml.example 复制即可
+/src/main/resources/application.yml
+/src/main/resources/application-local.yml

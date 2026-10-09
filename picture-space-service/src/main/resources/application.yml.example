@@ -1,0 +1,68 @@
+# ============================================================
+# 空间与团队成员服务配置模板（阶段 4）
+# ------------------------------------------------------------
+# 用法：把本文件复制成 application.yml 后再按需修改
+#     copy application.yml.example application.yml     (Windows)
+#     cp application.yml.example application.yml       (macOS / Linux)
+#
+# ${VAR:default} 表示「优先读环境变量 VAR，没有则用 default」。
+# ============================================================
+
+server:
+  port: 8130
+  servlet:
+    # 刻意与单体保持一致：网关把 /api/space/** 原样转发过来，不用 StripPrefix
+    context-path: /api
+
+spring:
+  application:
+    name: picture-space-service
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/database1}
+    username: ${DB_USERNAME:root}
+    # 必填：与单体、user-service 连的是同一个库（space / space_user 两张表在本服务名下）
+    password: ${DB_PASSWORD:}
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        service: picture-space-service
+        group: DEFAULT_GROUP
+        enabled: ${NACOS_DISCOVERY_ENABLED:true}
+        fail-fast: false
+        # 本机多网卡，固定注册 IP，避免挑到不可达的虚拟网卡
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+
+mybatis-plus:
+  configuration:
+    # 与单体的约定一致：实体字段名与 DB 列名完全相同，不做下划线转换
+    map-underscore-to-camel-case: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: isDelete
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+jwt:
+  # 必填且**必须与单体 picture-backend、picture-user-service 完全一致**：
+  # user-service 签发 token，本服务校验。不一致的典型症状是
+  # 「登录返回成功，但之后每个空间请求都提示未登录」。
+  # HS256 要求至少 32 字节；生成方式：openssl rand -base64 48
+  secret: ${JWT_SECRET:}
+  expiration: 86400000
+
+# ==================== 依赖 user-service ====================
+# space_user 列表要展示「成员」与「邀请人」的昵称/头像，而 user 表归 user-service 所有。
+# 默认给静态地址，**不依赖 Nacos**；置空（USER_API_BASE_URL=）则退化为按服务名走服务发现。
+user:
+  api:
+    base-url: ${USER_API_BASE_URL:http://127.0.0.1:8126}
+
+internal:
+  api:
+    # 内部接口（/internal/**）的最小校验头，留空则不校验（仅本地调试可用）。
+    # 生产应改为内网隔离 + mTLS 或统一的服务间鉴权。
+    token: ${INTERNAL_API_TOKEN:}

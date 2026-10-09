@@ -1,0 +1,51 @@
+# ============================================================
+# nacos profile：把网关切到「服务发现」模式（阶段 2）
+# ------------------------------------------------------------
+# 用法：
+#     java -jar picture-gateway.jar --spring.profiles.active=nacos
+#     # 或 mvn spring-boot:run -Dspring-boot.run.profiles=nacos
+#
+# 为什么做成 profile 而不是默认行为：
+#   一旦默认就用 lb://，Nacos 没起时网关会直接 503（找不到实例），
+#   项目就变成「必须先起 Nacos 才能跑」。做成开关后：
+#     - 默认：静态直连，零外部依赖，随时能开发/演示；
+#     - --spring.profiles.active=nacos：真正的服务发现与负载均衡。
+#   等这套稳定下来，再考虑把默认翻过来。
+#
+# 路由定义本身没有重复：上游地址统一来自 gateway.upstream.*，
+# 这里只覆盖这两个值（见 application.yml 顶部说明）。
+# ============================================================
+
+gateway:
+  upstream:
+    # 走 Nacos 服务发现 + 负载均衡（单体注册的服务名是 picture-backend）
+    http-uri: lb://picture-backend
+    # ⚠️ WebSocket 单独用 lb:ws:// 前缀。
+    # Gateway 的 WebsocketRoutingFilter 只认 ws/wss 两种 scheme，
+    # 而 lb:// 会被 ReactiveLoadBalancerClientFilter 按 http 处理、导致握手失败；
+    # 官方写法是 lb:ws://<serviceId>，由它先选实例再改写成 ws。
+    ws-uri: lb:ws://picture-backend
+    # 阶段 3b：用户与认证服务
+    user-uri: lb://picture-user-service
+    # 阶段 4b：空间与团队成员服务
+    space-uri: lb://picture-space-service
+
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        enabled: true
+        group: DEFAULT_GROUP
+        # 网关自身也注册进去，在 Nacos 控制台能看到整条链路
+        service: picture-gateway
+        # 与单体一致：本机多网卡，固定注册 IP，避免挑到不可达的虚拟网卡
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+        # Nacos 不可用时不要阻塞启动
+        fail-fast: false
+
+logging:
+  level:
+    # 排查「lb:// 为什么没选到实例」时调成 DEBUG
+    org.springframework.cloud.loadbalancer: INFO
+    com.alibaba.cloud.nacos: INFO

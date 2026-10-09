@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      picture-gateway：统一入口（阶段 1）
+
+      刻意做成一个**独立工程**而不是挂到 picture-backend 下当子模块：
+      这样网关相关的改动完全不影响单体，回滚时直接删掉本目录即可，
+      符合「每阶段可独立回滚」的要求。
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.6</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.flipped</groupId>
+    <artifactId>picture-gateway</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>picture-gateway</name>
+    <description>智能云图库统一网关</description>
+
+    <properties>
+        <java.version>11</java.version>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Spring Cloud 2021.0.x 对应 Spring Boot 2.6/2.7，与单体的 2.7.6 匹配 -->
+        <spring-cloud.version>2021.0.8</spring-cloud.version>
+        <!-- 阶段 2：Nacos 服务发现。版本与单体保持一致 -->
+        <spring-cloud-alibaba.version>2021.0.6.2</spring-cloud-alibaba.version>
+    </properties>
+
+    <dependencies>
+        <!--
+          Gateway 基于 WebFlux，**不能**引入 spring-boot-starter-web：
+          两者同时存在会因 Servlet 容器与 Reactor Netty 冲突而启动失败。
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+
+        <!-- 健康检查与路由查看：/actuator/health、/actuator/gateway/routes -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
+        <!-- ==================== 阶段 2：Nacos 服务发现 ==================== -->
+        <!-- 只在 nacos profile 下启用（见 application-nacos.yml），
+             默认 profile 走静态直连，不依赖 Nacos -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!-- lb:// 需要它。Spring Cloud 2021 起 Ribbon 已移除，负载均衡器必须显式引入，
+             否则 lb:// 会报 "Unable to find instance for picture-backend" -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-alibaba-dependencies</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

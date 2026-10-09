@@ -1,0 +1,125 @@
+# ============================================================
+# 阶段 0：本机依赖环境（一键起）
+# ------------------------------------------------------------
+# 用法：
+#     docker compose up -d                 # 只起 Redis + RabbitMQ + Nacos
+#     docker compose --profile mysql up -d # 额外起一个空 MySQL（见下方说明）
+#     docker compose ps
+#     docker compose down                  # 停止（数据保留在具名卷里）
+#     docker compose down -v               # 连数据一起删（谨慎）
+#
+# 前提：Docker Desktop 必须已启动。
+#
+# 端口说明（刻意避开已被占用的端口）：
+#     3306 本机已装 MySQL  → 容器 MySQL 映射到 **3307**，并且默认不启动
+#     6379 Redis、5672/15672 RabbitMQ、8848/9848 Nacos 本机空闲，直接用标准端口
+#
+# 关于 MySQL 的两种用法：
+#   1) 继续用本机已有的 MySQL（默认）——不动，什么也不用做；
+#   2) 想用容器里的空库：docker compose --profile mysql up -d，
+#      它会在首次启动时自动执行 picture-backend/sql/00-schema.sql 建好全部表，
+#      然后让应用连 3307 即可（见 docs/local-env.md）。
+#
+# 为什么只挂 00-schema.sql：
+#   sql/album.sql、team_space.sql、picture_index.sql 是「给老库做升级」的增量脚本，
+#   对新建的空库执行会因为列已存在而报错。00-schema.sql 是从当前库导出的**最终结构**，
+#   包含全部表与全部列（含 spaceType / indexStatus），所以初始化只需要它。
+# ============================================================
+
+name: smart-picture
+
+services:
+  # ---------------- Redis：两级缓存的 L2 + 版本号 ----------------
+  redis:
+    image: redis:7.2-alpine
+    container_name: sp-redis
+    ports:
+      - "6379:6379"
+    # appendonly 让缓存数据在容器重启后仍在，避免每次重启都冷启动回源打库
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------- RabbitMQ：阶段 5 起使用 ----------------
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: sp-rabbitmq
+    ports:
+      - "5672:5672"     # AMQP 协议端口（应用连这个）
+      - "15672:15672"   # 管理台 http://localhost:15672
+    environment:
+      # 这是为本机开发新建的一次性凭据，不是任何已有的真实密码；
+      # 如需修改，在 .env 里覆盖 RABBITMQ_USER / RABBITMQ_PASSWORD
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-me-dev-only}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------- Nacos：阶段 2 起使用（注册中心 + 配置中心）----------------
+  nacos:
+    image: nacos/nacos-server:v2.3.2
+    container_name: sp-nacos
+    ports:
+      - "8848:8848"   # 控制台 http://localhost:8848/nacos
+      - "9848:9848"   # gRPC，Nacos 2.x 客户端必须能连到这个端口
+    environment:
+      MODE: standalone
+      PREFER_HOST_MODE: hostname
+      # 仅本机开发关闭鉴权，省去配 token 密钥的麻烦；生产必须开启
+      NACOS_AUTH_ENABLE: "false"
+      # 限制 JVM 堆，避免 Nacos 在本机吃掉太多内存
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+      JVM_XMN: 128m
+    volumes:
+      - nacos-data:/home/nacos/data
+      - nacos-logs:/home/nacos/logs
+    # 刻意不配 healthcheck：Nacos 镜像里不一定有 curl，
+    # 检测命令缺失会让容器一直显示 unhealthy，反而误导。
+    # 启动大约需要 20~40 秒，用日志确认：
+    #   docker compose logs -f nacos
+    restart: unless-stopped
+
+  # ---------------- MySQL（默认不启动，需 --profile mysql）----------------
+  mysql:
+    profiles: ["mysql"]
+    image: mysql:8.0
+    container_name: sp-mysql
+    ports:
+      - "3307:3306"   # 刻意用 3307：本机 3306 已被现有 MySQL 占用
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-dev-only}
+      MYSQL_DATABASE: database1
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 只在数据卷为空（首次启动）时执行
+      - ./picture-backend/sql/00-schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  rabbitmq-data:
+  nacos-data:
+  nacos-logs:
+  mysql-data:

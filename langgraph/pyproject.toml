@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smart-picture-langgraph"
+version = "0.1.0"
+description = "Smart Picture 的 Agent 服务（8000）、图片索引服务（8001）与 Qwen-VL 网关（8080）"
+requires-python = ">=3.10"
+
+# 这里的版本是「可用范围」；requirements.txt 里是当前实测可用的精确版本。
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "pydantic>=2.5",
+    "python-dotenv>=1.0",
+    "requests>=2.31",
+    "openai>=1.30",
+    "langgraph>=0.2",
+    "langgraph-checkpoint-sqlite>=2.0",
+    "langchain>=0.3",
+    "langchain-core>=0.3",
+    "langchain-openai>=0.2",
+    "langchain-community>=0.3",
+    "langchain-chroma>=0.1",
+    "langchain-huggingface>=0.1",
+    "langchain-text-splitters>=0.3",
+    "chromadb>=0.5",
+    "sentence-transformers>=3.0",
+    "numpy>=1.26",
+    "pillow>=10.0",
+    "reportlab>=4.0",
+]
+
+[project.optional-dependencies]
+# 安装 torch 请按 https://pytorch.org 选对应 CUDA 版本，不要直接用 PyPI 默认的 CPU 版覆盖
+gpu = ["torch"]
+
+[tool.setuptools]
+# 显式列出包，避免把 data/、legacy/ 一起装进去
+packages = [
+    "common",
+    "common.clients",
+    "app",
+    "app.api",
+    "app.graph",
+    "app.memory",
+    "app.clients",
+    "app.tools",
+    "services",
+]
+
+[project.scripts]
+# pip install -e . 之后可以直接用这三个命令启动（不装也能用 run_*.py）
+agent = "app.main:main"
+index-api = "services.index_api:main"
+qwen-api = "services.qwen_api:main"

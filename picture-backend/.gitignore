@@ -1,0 +1,46 @@
+
+HELP.md
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Custom ###
+# 环境私有配置，一律不入库：
+#   application-local.yml —— 腾讯云 COS 密钥
+#   application.yml       —— JWT 签名密钥、数据库密码
+application-local.yml
+/src/main/resources/application-local.yml
+/src/main/resources/application.yml
+# 例外：带占位符的模板必须入库，clone 下来的人照它复制出 application.yml
+!/src/main/resources/application.yml.example
+/src/main/resources/static/
+/src/test/

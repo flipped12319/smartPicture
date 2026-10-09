@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  把日志同时写一份到文件。
+
+  为什么需要它：`mvnw spring-boot:run` 会 **fork 一个新 JVM** 跑应用，那个子进程的 stdout
+  不会进到父进程被重定向的文件里 —— 表现是「日志文件里只有 Maven 的输出，应用日志一条都没有」。
+  排查问题时（尤其是 MyBatis 打的 SQL 与异常堆栈）这一条非常致命，因为你会以为「没有报错」。
+
+  影响：只有在显式加上 `-Dlogging.config=classpath:logback-file.xml` 时才生效，
+  日常启动不受影响（默认仍用 Spring Boot 自带的控制台配置）。
+
+  用法：
+      mvnw spring-boot:run -Dspring-boot.run.jvmArguments="-Dlogging.config=classpath:logback-file.xml"
+  日志落在工作目录下的 app.log。
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>app.log</file>
+        <append>false</append>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>

@@ -1,0 +1,103 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+.DS_Store
+dist
+dist-ssr
+coverage
+*.local
+
+/cypress/videos/
+/cypress/screenshots/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+*.tsbuildinfo
+
+# 注意：这里原本有一行 `.gitignore`，会把所有 .gitignore 文件自己也忽略掉。
+# 后果是全新 clone 出来的仓库没有任何忽略规则，application-local.yml / .env
+# 里的密钥就失去了保护，所以必须让 .gitignore 本身入库。
+
+HELP.md
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Custom ###
+# 环境私有配置一律不入库（application-local.yml 的 COS 密钥、application.yml 的
+# JWT 密钥与数据库密码）。具体忽略规则在 picture-backend/.gitignore 里，因为它需要
+# 按 backend 目录来锚定路径；而 clone 下来的人照 application.yml.example 复制即可。
+application-local.yml
+/src/main/resources/static/
+/src/test/
+langgraph/chroma_memory_db/
+__pycache__/
+*.pyc
+*.pdf
+
+### 密钥文件（切勿入库）###
+.env
+.env.*
+!.env.example
+
+### 验证脚本的临时产物（切勿入库）###
+# tools/verify/GenToken.java 会在这里生成 tokens.txt，内容是**真实可用的 JWT**。
+# 它只是本地排查用的短期凭据，绝不能提交。.acl-report 是沙箱 ACL 修复时的备份。
+.tmp-dbdump/
+.acl-report/
+
+### Python / LangGraph 运行时产物 ###
+chroma_rag_db/
+langgraph/chroma_rag_db/
+chroma_picture_db/
+langgraph/chroma_picture_db/
+checkpoints.db
+*.sqlite3
+
+# langgraph 的运行时产物已统一收进 langgraph/data/
+# （向量库、日志、PDF 静态文件），整目录忽略，避免大二进制文件入库
+langgraph/data/

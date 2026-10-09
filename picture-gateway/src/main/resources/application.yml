@@ -1,0 +1,125 @@
+# ============================================================
+# 统一网关配置（阶段 1 + 阶段 2）
+# ------------------------------------------------------------
+# 本文件**不含任何密钥**，所以直接入库。
+#
+# 上游地址抽成了 gateway.upstream.* 两个属性：
+#   - 默认（本文件）：静态直连单体，**不依赖 Nacos**，本机随时能跑；
+#   - 激活 nacos profile（application-nacos.yml）时改成 lb://，
+#     走 Nacos 服务发现 + 负载均衡。
+# 这样切换发现模式只需要换一个 profile，不用改路由定义、也不会两份配置各写一半。
+# ============================================================
+
+server:
+  # 统一入口。前端只需认这一个地址，不再分别直连 8123 / 8000 / 8001 / 8080
+  port: 9000
+
+# 上游地址。默认静态直连；nacos profile 会覆盖成 lb://
+gateway:
+  upstream:
+    http-uri: ${BACKEND_URI:http://127.0.0.1:8123}
+    ws-uri: ${BACKEND_WS_URI:ws://127.0.0.1:8123}
+    # 阶段 3b：用户与认证服务
+    user-uri: ${USER_SERVICE_URI:http://127.0.0.1:8126}
+    # 阶段 4b：空间与团队成员服务
+    space-uri: ${SPACE_SERVICE_URI:http://127.0.0.1:8130}
+
+spring:
+  application:
+    name: picture-gateway
+  cloud:
+    # 默认 profile 显式关闭 Nacos 服务发现：
+    # 这样「默认形态」完全不依赖 Nacos（不注册、不拉实例列表），
+    # 本机只要单体在跑，网关就能用。需要服务发现时加 --spring.profiles.active=nacos。
+    nacos:
+      discovery:
+        enabled: false
+        fail-fast: false
+    gateway:
+      # ---------------- 统一 CORS ----------------
+      # 前端开发服务器（5173）与网关（9000）不同源，跨域必须在这里放行；
+      # 目标是让各业务服务不再各自配置跨域。
+      globalcors:
+        # 让 CORS 也作用于网关自身处理的请求（如未匹配到路由的 404、actuator）
+        add-to-simple-url-handler-mapping: true
+        cors-configurations:
+          '[/**]':
+            # 带着 Cookie 跨域时不能用 "*"，必须用 originPatterns（网关会回显具体 Origin）
+            allowedOriginPatterns: "*"
+            allowedMethods: "*"
+            allowedHeaders: "*"
+            exposedHeaders: "*"
+            # 浏览器端要靠 JSESSIONID Cookie 保持登录态，必须允许携带凭据
+            allowCredentials: true
+            maxAge: 3600
+
+      routes:
+        # ---------------- 协同编辑 WebSocket ----------------
+        # 必须单独一条路由，且 uri 的 scheme 必须是 ws：
+        # Gateway 的 WebsocketRoutingFilter 只处理 ws/wss，写成 http 会被它跳过。
+        # order 更小 = 优先级更高，必须排在下面的 /api/** 之前，
+        # 否则 WebSocket 握手会被普通 HTTP 路由接走而失败。
+        #
+        # ⚠️ 这条路由**刻意不挂任何响应处理类过滤器**（例如 DedupeResponseHeader）。
+        # 实测：把 DedupeResponseHeader 配成 default-filters 会同时作用到本路由，
+        # 导致升级成功后回包链路被破坏 —— 客户端收到 101 却拿不到服务端消息，
+        # 随即以 1006 异常断开（后端日志显示房间已建、又立刻离开）。
+        # 因此去重过滤器改为只挂在下面那条 HTTP 路由上。
+        - id: picture-edit-websocket
+          uri: ${gateway.upstream.ws-uri}
+          order: -1
+          predicates:
+            - Path=/api/ws/**
+
+        # ---------------- 用户与认证服务（阶段 3b）----------------
+        # order 更小 = 优先级更高，必须排在下面的 /api/** 之前：
+        # /api/user/** 归 user-service（登录、注册、用户管理），
+        # /api/** 其余归单体（图片、空间、相册等）。
+        #
+        # 注意：user-service 的内部接口在 /api/internal/**，**刻意不为它配路由** ——
+        # 这些路径会落到单体并返回 404，因此从网关走不进来（服务间调用直连端口）。
+        - id: picture-user-service
+          uri: ${gateway.upstream.user-uri}
+          order: -2
+          predicates:
+            - Path=/api/user/**
+
+        # ---------------- 空间与团队成员服务（阶段 4b）----------------
+        # /api/space/** 与 /api/spaceUser/** 归 space-service。
+        # 注意：内部接口在 /api/internal/**，**刻意不为它配路由** ——
+        # 这些路径会落到单体并返回 404，因此从网关走不进来（服务间调用直连端口）。
+        - id: picture-space-service
+          uri: ${gateway.upstream.space-uri}
+          order: -2
+          predicates:
+            - Path=/api/space/**,/api/spaceUser/**
+
+        # ---------------- 现有单体（阶段 1 的唯一后端）----------------
+        # 单体 context-path 是 /api，而这里不做 StripPrefix，
+        # 因此 /api/xxx 会原样转发成 http://127.0.0.1:8123/api/xxx
+        - id: picture-backend
+          uri: ${gateway.upstream.http-uri}
+          predicates:
+            - Path=/api/**
+          filters:
+            # 单体自己也配了 CORS，会和网关的响应头重复；
+            # 浏览器遇到两个 Access-Control-Allow-Origin 会直接判定跨域失败，
+            # 因此这里保留第一个、丢弃重复项。
+            # 注意：只挂在这条 HTTP 路由上，不要放进 default-filters（原因见上）。
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials Access-Control-Expose-Headers Vary, RETAIN_FIRST
+
+# ---------------- 网关自身的可观测入口 ----------------
+management:
+  endpoints:
+    web:
+      exposure:
+        # gateway 端点可以列出当前生效的路由，排查「请求为什么没转发」时很有用
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    # 需要看具体转发了哪些路由时调成 DEBUG
+    org.springframework.cloud.gateway: INFO

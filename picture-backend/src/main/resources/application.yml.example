@@ -1,0 +1,149 @@
+# ============================================================
+# application.yml 示例模板
+# ------------------------------------------------------------
+# 用法：把本文件复制成 application.yml 之后再按需修改：
+#     copy application.yml.example application.yml     (Windows)
+#     cp application.yml.example application.yml       (macOS / Linux)
+#
+# 为什么要有这份模板：
+#   真正的 application.yml 里含有 JWT 签名密钥和数据库密码，属于「环境私有配置」，
+#   已被 .gitignore 忽略、不会进入 Git 历史。为了让 clone 下来的人知道需要配哪些项，
+#   这里提供一份只带占位符的模板。
+#
+# 关于 ${VAR:default} 写法：
+#   Spring 的语义是「优先读环境变量 VAR，没有该变量时用 default」。
+#   所以下面每一项都既可以用环境变量注入（适合容器 / CI），也可以直接改本文件。
+#
+# 密钥类的两项（DB_PASSWORD、JWT_SECRET）推荐二选一：
+#   1) 设置环境变量 DB_PASSWORD / JWT_SECRET；
+#   2) 或写进同样被忽略的 application-local.yml —— 它作为 local profile 会覆盖本文件。
+# ============================================================
+
+server:
+  port: 8123
+  servlet:
+    context-path: /api
+spring:
+  # 开放更大的文件上传体积
+  servlet:
+    multipart:
+      max-file-size: 10MB
+  profiles:
+    # 默认额外加载 application-local.yml（腾讯云 COS 密钥等本机私有配置放在那里）
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  application:
+    name: picture-backend
+  # ==================== 阶段 2：Nacos（注册中心 + 配置中心）====================
+  # 地址与开关都走「环境变量 + 默认值」，默认连 docker compose 起的那个 Nacos。
+  cloud:
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        # 服务名：网关用 lb://picture-backend 来发现它
+        service: picture-backend
+        group: DEFAULT_GROUP
+        enabled: ${NACOS_DISCOVERY_ENABLED:true}
+        # 关键：Nacos 不可用时只记日志、不阻塞启动，
+        # 保证「本机不跑 Nacos 也能正常开发」这条底线不被破坏
+        fail-fast: false
+        # 显式指定注册的 IP。本机有 WSL / VMware / Hyper-V 等 7 个网卡，
+        # Nacos 自动选 IP 的结果不确定（实测挑中了 Hyper-V 的 192.168.137.1），
+        # 一旦挑到不可达的网卡，网关的 lb:// 就会转发失败。
+        # 网关与单体同机，固定 127.0.0.1 最稳；部署到多机时用环境变量覆盖成本机真实 IP。
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        group: DEFAULT_GROUP
+        file-extension: yml
+        enabled: ${NACOS_CONFIG_ENABLED:true}
+  # 远程配置：`optional:` 前缀表示「拉不到就跳过」——
+  # Nacos 没启动、或这份配置还没创建，都不会导致启动失败。
+  #
+  # ⚠️ 注意：Nacos 里的配置内容必须是**纯 ASCII**。
+  # Spring Cloud Alibaba 用 JVM 默认字符集解析远程配置，中文 Windows（代码页 936）下
+  # 含中文会抛 MalformedInputException，而且**整份远程配置被静默跳过**（不报错、不失败）。
+  config:
+    import:
+      - optional:nacos:picture-backend.yml
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${DB_URL:jdbc:mysql://localhost:3306/database1}
+    username: ${DB_USERNAME:root}
+    # 必填：本机 MySQL 密码。留空会导致连接被拒，请设置环境变量 DB_PASSWORD 或直接改这里
+    password: ${DB_PASSWORD:}
+  # Redis 配置
+  redis:
+    database: ${REDIS_DATABASE:0}
+    # 注意：Redis 不可用不会导致启动失败 —— RedisCacheHelper 有熔断降级，
+    # 读不到缓存时会自动回源数据库
+    host: ${REDIS_HOST:127.0.0.1}
+    port: ${REDIS_PORT:6379}
+    timeout: 5000
+
+mybatis-plus:
+  configuration:
+    # MyBatis 配置
+    map-underscore-to-camel-case: false
+    #仅在开发过程中生成日志
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    #配置逻辑删除，在某个字段设置值，为1代表删除，为0未删除
+  global-config:
+    db-config:
+      logic-delete-field: isDelete
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+#接口文档配置
+knife4j:
+  enable: true
+  openapi:
+    title: 接口文档
+    version: 1.0
+    group:
+      default:
+        group-name: 默认分组
+        api-rule: package
+        api-rule-resources:
+          - com.flipped.picturebackend.controller
+springdoc:
+  api-docs:
+    path: /api/api-docs
+agent:
+  api:
+    # Python LangGraph Agent 服务（langgraph/run_agent.py，默认 8000）
+    url: ${AGENT_API_URL:http://127.0.0.1:8000/chat}
+jwt:
+  # 必填：JWT 签名密钥。HS256 要求密钥不短于 32 字节，否则签发 token 时直接抛 WeakKeyException。
+  # 生成方式（任选其一）：
+  #     openssl rand -base64 48
+  #     python -c "import secrets; print(secrets.token_urlsafe(48))"
+  #
+  # ⚠️ 下面的默认值只是为了让本地「复制完就能跑」，生产环境**必须**覆盖：
+  #    密钥一旦泄漏，任何人都能伪造出任意用户的 token（JwtUtil 只校验签名与过期时间）。
+  secret: ${JWT_SECRET:CHANGE_ME_DEV_ONLY_0123456789abcdefghijklmnop}
+  expiration: 86400000   # 24小时，单位毫秒
+
+# ==================== 阶段 3b：单体不再读写 user 表 ====================
+# user 表已归 picture-user-service 所有，单体通过 OpenFeign 读用户信息。
+# ⚠️ jwt.secret 必须与 picture-user-service 的完全一致：那边签发、这边校验。
+user:
+  api:
+    # 用户服务地址。默认静态地址（不依赖 Nacos）；
+    # 置空（设 USER_API_BASE_URL= 空串）则退化为按服务名走服务发现 + 负载均衡。
+    base-url: ${USER_API_BASE_URL:http://127.0.0.1:8126}
+
+# ==================== 阶段 4b：单体不再读写 space / space_user 表 ====================
+# 两张表都已归 picture-space-service 所有：
+#   - 读：空间信息与「用户在某空间的角色」（本地 Caffeine 缓存挡住热路径）；
+#   - 写：只有配额增减一处跨服务写（updateSpaceQuota）。
+# 前端不经过单体：网关直接把 /api/space/**、/api/spaceUser/** 路由到 space-service。
+space:
+  api:
+    # 空间服务地址。默认静态地址（不依赖 Nacos）；
+    # 置空（设 SPACE_API_BASE_URL= 空串）则退化为按服务名走服务发现 + 负载均衡。
+    base-url: ${SPACE_API_BASE_URL:http://127.0.0.1:8130}
+internal:
+  api:
+    # 调 user-service / space-service 内部接口时带的校验头，必须与它们的
+    # internal.api.token 完全一致，否则内部调用会被 40101 拒绝。
+    token: ${INTERNAL_API_TOKEN:dev-internal-token}

@@ -1,0 +1,45 @@
+package com.flipped.spaceservice.model.enums;
+
+import cn.hutool.core.util.ObjUtil;
+import lombok.Getter;
+
+/**
+ * 空间类型枚举
+ */
+@Getter
+public enum SpaceTypeEnum {
+
+    /**
+     * 私有空间：每个用户仅能创建一个，他人无法加入
+     */
+    PRIVATE("私有空间", 0),
+
+    /**
+     * 团队空间：用户可创建多个，并邀请他人加入、分配权限
+     */
+    TEAM("团队空间", 1);
+
+    private final String text;
+
+    private final int value;
+
+    SpaceTypeEnum(String text, int value) {
+        this.text = text;
+        this.value = value;
+    }
+
+    /**
+     * 根据 value 获取枚举
+     */
+    public static SpaceTypeEnum getEnumByValue(Integer value) {
+        if (ObjUtil.isEmpty(value)) {
+            return null;
+        }
+        for (SpaceTypeEnum spaceTypeEnum : SpaceTypeEnum.values()) {
+            if (spaceTypeEnum.value == value) {
+                return spaceTypeEnum;
+            }
+        }
+        return null;
+    }
+}

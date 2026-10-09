@@ -1,0 +1,38 @@
+# ============================================================
+# Remote config for picture-backend   (Nacos DataId = picture-backend.yml)
+# ------------------------------------------------------------
+# This file is the source of truth for the config stored in Nacos.
+# Publish / update it with:
+#
+#   curl -s -X POST http://localhost:8848/nacos/v1/cs/configs \
+#     -F "dataId=picture-backend.yml" -F "group=DEFAULT_GROUP" \
+#     -F "type=yaml" -F "content=<deploy/nacos/picture-backend.yml"
+#
+# !! KEEP THIS FILE ASCII-ONLY !!
+#
+# Reason: Spring Cloud Alibaba parses Nacos config content with the JVM
+# default charset. On a Chinese Windows machine (ANSI code page GB2312/936)
+# any non-ASCII character here causes:
+#     YamlException: MalformedInputException: Input length = 1
+# and the WHOLE remote config is silently skipped - startup still succeeds,
+# so the problem is very hard to notice. ASCII-only content works no matter
+# how the JVM is launched. Chinese explanations belong in docs/, not here.
+#
+# These keys used to exist ONLY as inline @Value defaults inside
+# PictureIndexServiceImpl - invisible in every config file. They now live
+# here, and that bean is annotated @RefreshScope, so editing them in the
+# Nacos console takes effect without repackaging or restarting.
+#
+# Precedence: environment variables > this remote config > local application.yml
+# ============================================================
+
+pictureIndex:
+  api:
+    # Vector index service (langgraph/services/index_api.py, default 8001)
+    base-url: http://127.0.0.1:8001
+  search:
+    # Candidate count requested from the vector service
+    top-k: 100
+    # Similarity floor. 0.48 is calibrated on real data:
+    # relevant 0.51-0.61 vs noise 0.40-0.47 -> take the gap in between
+    min-similarity: 0.48
